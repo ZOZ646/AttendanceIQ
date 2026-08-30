@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Dashboard</h1>
+    <div class="page-subtitle" id="today-date-label">Loading…</div>
+  </div>
+  <div class="flex items-center gap-8">
+    <a href="{{ url_for('export_page') }}" class="btn btn-sm">
+      <i class="ti ti-download" style="font-size:14px;"></i>
+      Export
+    </a>
+    <a href="{{ url_for('enroll') }}" class="btn btn-primary btn-sm">
+      <i class="ti ti-user-plus" style="font-size:14px;"></i>
+      Enroll Employee
+    </a>
+  </div>
+</div>
+
+<div class="page-body">
+
+  <!-- =======================================================================
+       Stat cards
+       ======================================================================= -->
+  <div class="stat-cards">
+
+    <!-- Checked-in today -->
+    <div class="stat-card">
+      <div class="stat-label">Checked In Today</div>
+      <div class="stat-value" id="stat-checkin">—</div>
+      <div class="stat-delta" id="stat-checkin-delta">employees present</div>
+      <div class="stat-icon">
+        <i class="ti ti-users" style="font-size:22px;"></i>
+      </div>
+    </div>
+
+    <!-- Late arrivals -->
+    <div class="stat-card">
+      <div class="stat-label">Late Arrivals</div>
+      <div class="stat-value" id="stat-late">—</div>
+      <div class="stat-delta" id="stat-late-delta">today</div>
+      <div class="stat-icon">
+        <i class="ti ti-clock-exclamation" style="font-size:22px;"></i>
+      </div>
+    </div>
+
+    <!-- Average check-in time -->
+    <div class="stat-card">
+      <div class="stat-label">Avg Check-In Time</div>
+      <div class="stat-value" id="stat-avg-time">—</div>
+      <div class="stat-delta">today's average</div>
+      <div class="stat-icon">
+        <i class="ti ti-clock" style="font-size:22px;"></i>
+      </div>
+    </div>
+
+    <!-- Total deductions -->
+    <div class="stat-card">
+      <div class="stat-label">Total Deductions</div>
+      <div class="stat-value" id="stat-deductions">—</div>
+      <div class="stat-delta down" id="stat-deductions-delta">today</div>
+      <div class="stat-icon">
+        <i class="ti ti-cash" style="font-size:22px;"></i>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- =======================================================================
+       Dashboard grid — Live feed + side panel
+       ======================================================================= -->
+  <div class="dashboard-grid" id="live-feed">
+
+    <!-- Live camera panel -->
+    <div class="camera-panel">
+      <div class="camera-header">
+        <div class="camera-title">
+          <span class="live-dot"></span>
+          Live Recognition Feed
+        </div>
+        <div class="camera-meta">CAM_01 · Local Webcam</div>
+      </div>
+      <div class="camera-feed-container">
+        <img class="camera-feed"
+             src="{{ url_for('video_feed') }}"
+             alt="Live webcam feed with face recognition annotations"
+             id="camera-img"
+             onerror="this.style.display='none';document.getElementById('camera-err').style.display='flex'">
+        <!-- Error fallback shown if stream fails to load -->
+        <div id="camera-err" style="display:none; height:300px; align-items:center; justify-content:center;
+             background:var(--bg-base); color:var(--text-muted); flex-direction:column; gap:8px;">
+          <i class="ti ti-camera-off" style="font-size:32px; opacity:0.3;"></i>
+          <span style="font-size:13px;">Camera stream unavailable</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side panel -->
+    <div class="side-panel">
+
+      <!-- Recent check-in toast card -->
+      <div class="toast-card">
+        <div class="toast-label">Last Check-In</div>
+        <div id="recent-checkin-strip">
+          <div class="toast-empty">No check-ins recorded yet today.</div>
+        </div>
+      </div>
+
+      <!-- Today's presence card -->
+      <div class="presence-card">
+        <div class="presence-card-header">
+          Today's Presence
+          <span id="presence-count" style="color:var(--text-muted);float:right;font-weight:400;">—</span>
+        </div>
+        <div class="presence-list" id="presence-list">
+          <div class="empty-state" style="padding:24px;">
+            <div class="empty-state-title">Waiting for check-ins</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       Today's attendance table
+       ======================================================================= -->
+  <div class="table-card">
+    <div class="table-header">
+      <div class="table-title">Today's Attendance</div>
+      <div class="table-meta" id="today-log-count">Loading…</div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Check-In Time</th>
+            <th>Status</th>
+            <th>Deduction</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody id="today-log-tbody">
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <span class="spinner"></span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- .page-body -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+  // Set today's date label
+  document.getElementById('today-date-label').textContent =
+    new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+  // Update presence list from today_log data
+  const _origPollLog = pollTodayLog;
+  const origPollTodayLog = pollTodayLog;
+
+  // Hook into today log to also update the presence card
+  const _originalPoll = window.pollTodayLog;
+
+  async function updatePresenceCard(rows) {
+    const list    = document.getElementById('presence-list');
+    const countEl = document.getElementById('presence-count');
+    if (!list) return;
+
+    if (!rows || rows.length === 0) {
+      list.innerHTML = `<div class="empty-state" style="padding:24px;">
+        <div class="empty-state-title">No check-ins yet</div></div>`;
+      if (countEl) countEl.textContent = '0';
+      return;
+    }
+
+    if (countEl) countEl.textContent = rows.length;
+    list.innerHTML = rows.slice(0, 8).map(r => {
+      const init = (r.name || '?').split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
+      const cls  = r.status === 'on_time' ? 'success' : (r.status === 'very_late' ? 'warning' : 'danger');
+      return `<div class="presence-item">
+        <div class="flex items-center gap-8">
+          <div class="avatar" style="width:26px;height:26px;font-size:10px;">${init}</div>
+          <div>
+            <div class="presence-item-name">${r.name}</div>
+            <div class="presence-item-dept">${r.department}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-8">
+          <span class="presence-item-time">${r.check_in_time}</span>
+          <span class="badge badge-${cls}" style="font-size:10px;padding:2px 6px;">
+            ${r.status === 'on_time' ? 'On time' : (r.status === 'very_late' ? 'Very late' : 'Late')}
+          </span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Override pollTodayLog to also update presence card
+  window.pollTodayLog = async function() {
+    try {
+      const res  = await fetch('/api/today_log');
+      const json = await res.json();
+      if (!json.ok) return;
+      const rows = json.data;
+
+      // Update main table
+      const tbody = document.getElementById('today-log-tbody');
+      const escH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const inits = n => (n||'?').split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);
+      const badge = (st, lb) => {
+        const m = {on_time:'badge-success',late:'badge-danger',very_late:'badge-warning'};
+        const c = m[st]||'badge-muted';
+        return `<span class="badge ${c}"><span class="badge-dot"></span>${lb||st}</span>`;
+      };
+
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+          <div class="empty-state-title">No check-ins yet today</div>
+          <div class="empty-state-desc">Check-ins will appear here automatically</div>
+        </div></td></tr>`;
+        document.getElementById('today-log-count').textContent = '0 records';
+      } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+          <td><div class="employee-cell"><div class="avatar">${inits(r.name)}</div>
+            <div class="employee-info">
+              <div class="emp-name">${escH(r.name)}</div>
+              <div class="emp-dept">${escH(r.department)}</div>
+            </div></div></td>
+          <td><span class="mono">${escH(r.check_in_time)}</span></td>
+          <td>${badge(r.status, r.status_label)}</td>
+          <td>${r.deduction_amount > 0
+            ? `<span class="deduction-amount mono">-$${parseFloat(r.deduction_amount).toFixed(2)}</span>`
+            : `<span class="deduction-none mono">—</span>`}</td>
+          <td>${r.confidence > 0
+            ? `<span class="mono text-secondary">${parseFloat(r.confidence).toFixed(1)}%</span>`
+            : `<span class="text-muted">—</span>`}</td>
+        </tr>`).join('');
+        document.getElementById('today-log-count').textContent = `${rows.length} record${rows.length !== 1 ? 's' : ''}`;
+      }
+
+      updatePresenceCard(rows);
+    } catch(err) { console.warn('pollTodayLog error', err); }
+  };
+
+  // Re-trigger polls with updated function
+  window.pollTodayLog();
+</script>
+{% endblock %}

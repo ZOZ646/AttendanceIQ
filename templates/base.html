@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AttendanceIQ{% endblock %} — Enterprise Attendance System</title>
+  <meta name="description" content="Enterprise face-recognition employee attendance management system with real-time check-in and payroll integration.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Tabler Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+
+  <!-- Design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ===================================================================
+       Sidebar
+       =================================================================== -->
+  <aside class="sidebar">
+
+    <!-- Org switcher -->
+    <div class="org-switcher" title="Switch organization">
+      <div class="org-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </div>
+      <div class="org-info">
+        <div class="org-name">AttendanceIQ</div>
+        <div class="org-meta">Enterprise</div>
+      </div>
+      <i class="ti ti-selector" style="color:var(--text-muted);font-size:14px;"></i>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar-nav">
+
+      <!-- OVERVIEW -->
+      <div class="nav-section">
+        <div class="nav-section-label">Overview</div>
+      </div>
+
+      <a href="{{ url_for('dashboard') }}"
+         class="nav-item {% if active_page == 'dashboard' %}active{% endif %}"
+         id="nav-dashboard">
+        <i class="ti ti-layout-dashboard" style="font-size:16px;"></i>
+        Dashboard
+      </a>
+
+      <a href="{{ url_for('dashboard') }}#live-feed"
+         class="nav-item {% if active_page == 'live' %}active{% endif %}"
+         id="nav-live">
+        <i class="ti ti-video" style="font-size:16px;"></i>
+        Live Check-In
+      </a>
+
+      <a href="{{ url_for('enroll') }}"
+         class="nav-item {% if active_page == 'enroll' %}active{% endif %}"
+         id="nav-enroll">
+        <i class="ti ti-user-plus" style="font-size:16px;"></i>
+        Employees
+      </a>
+
+      <!-- PAYROLL -->
+      <div class="nav-section" style="margin-top:4px;">
+        <div class="nav-section-label">Payroll</div>
+      </div>
+
+      <a href="{{ url_for('attendance_log') }}"
+         class="nav-item {% if active_page == 'log' %}active{% endif %}"
+         id="nav-log">
+        <i class="ti ti-clock-record" style="font-size:16px;"></i>
+        Attendance Log
+      </a>
+
+      <a href="{{ url_for('export_page') }}"
+         class="nav-item {% if active_page == 'export' %}active{% endif %}"
+         id="nav-export">
+        <i class="ti ti-download" style="font-size:16px;"></i>
+        Payroll Export
+      </a>
+
+      <!-- CONFIGURATION -->
+      <div class="nav-section" style="margin-top:4px;">
+        <div class="nav-section-label">Configuration</div>
+      </div>
+
+      <a href="{{ url_for('policy') }}"
+         class="nav-item {% if active_page == 'policy' %}active{% endif %}"
+         id="nav-policy">
+        <i class="ti ti-settings-2" style="font-size:16px;"></i>
+        Attendance Policy
+      </a>
+
+    </nav>
+
+    <!-- User block -->
+    <div class="sidebar-user">
+      <div class="user-avatar-sm">HR</div>
+      <div class="user-info">
+        <div class="user-name">HR Admin</div>
+        <div class="user-role">Administrator</div>
+      </div>
+      <i class="ti ti-dots" style="color:var(--text-muted);font-size:14px;"></i>
+    </div>
+
+  </aside>
+
+  <!-- ===================================================================
+       Main content
+       =================================================================== -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+
+<!-- Toast notification container -->
+<div id="toast-popup"></div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

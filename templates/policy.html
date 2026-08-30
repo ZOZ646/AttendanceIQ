@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Attendance Policy{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Attendance Policy</h1>
+    <div class="page-subtitle">Configure working hours, grace periods, and deduction rules</div>
+  </div>
+</div>
+
+<div class="page-body">
+
+  <div id="policy-alert"></div>
+
+  <div style="display:grid;grid-template-columns:520px 1fr;gap:16px;align-items:start;">
+
+    <!-- Policy form -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Policy Configuration</div>
+          <div class="card-subtitle">Changes apply to all future check-ins</div>
+        </div>
+      </div>
+
+      <form id="policy-form" novalidate>
+        <!-- Work hours -->
+        <div class="policy-section">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);
+                      letter-spacing:0.05em;text-transform:uppercase;margin-bottom:12px;">
+            Work Hours
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="start-time">Expected Start Time</label>
+              <input type="time" id="start-time" name="start_time"
+                     value="{{ policy.start_time }}" class="form-input"
+                     style="color-scheme:dark;">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="grace-period">Grace Period (minutes)</label>
+              <input type="number" id="grace-period" name="grace_period_minutes"
+                     value="{{ policy.grace_period_minutes }}" min="0" max="120"
+                     class="form-input" placeholder="15">
+              <div class="form-hint">Late arrivals within this window are still marked on-time</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deduction type toggle -->
+        <div class="policy-section">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);
+                      letter-spacing:0.05em;text-transform:uppercase;margin-bottom:12px;">
+            Deduction Model
+          </div>
+          <div class="deduction-toggle">
+            <div class="deduction-toggle-btn {% if policy.deduction_type == 'flat_tiers' %}active{% endif %}"
+                 id="toggle-flat" onclick="setDeductionType('flat_tiers')">
+              <div style="font-size:13px;font-weight:600;">Flat Tiers</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                Fixed amounts per tier
+              </div>
+            </div>
+            <div class="deduction-toggle-btn {% if policy.deduction_type == 'per_minute' %}active{% endif %}"
+                 id="toggle-permin" onclick="setDeductionType('per_minute')">
+              <div style="font-size:13px;font-weight:600;">Per Minute</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                Linear rate per minute late
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="deduction-type" name="deduction_type"
+                 value="{{ policy.deduction_type }}">
+
+          <!-- Flat tiers fields -->
+          <div id="fields-flat" {% if policy.deduction_type == 'per_minute' %}style="display:none;"{% endif %}>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="late-flat">
+                  Late Deduction ($)
+                  <span style="color:var(--text-muted);font-weight:400;">— for "Late"</span>
+                </label>
+                <input type="number" id="late-flat" name="late_flat"
+                       value="{{ '%.2f' % policy.late_flat }}" min="0" step="0.50"
+                       class="form-input" placeholder="25.00">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="very-late-flat">
+                  Very Late Deduction ($)
+                  <span style="color:var(--text-muted);font-weight:400;">— for "Very Late"</span>
+                </label>
+                <input type="number" id="very-late-flat" name="very_late_flat"
+                       value="{{ '%.2f' % policy.very_late_flat }}" min="0" step="0.50"
+                       class="form-input" placeholder="75.00">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="very-late-threshold">
+                "Very Late" Threshold (minutes after grace)
+              </label>
+              <input type="number" id="very-late-threshold" name="very_late_threshold_minutes"
+                     value="{{ policy.very_late_threshold_minutes }}" min="1" max="480"
+                     class="form-input" placeholder="60">
+              <div class="form-hint">
+                Arrivals this many minutes late (after grace) are classified as "Very Late"
+              </div>
+            </div>
+          </div>
+
+          <!-- Per-minute rate fields -->
+          <div id="fields-permin" {% if policy.deduction_type != 'per_minute' %}style="display:none;"{% endif %}>
+            <div class="form-group">
+              <label class="form-label" for="per-minute-rate">
+                Rate per Minute Late ($/min)
+              </label>
+              <input type="number" id="per-minute-rate" name="per_minute_rate"
+                     value="{{ '%.2f' % policy.per_minute_rate }}" min="0" step="0.10"
+                     class="form-input" placeholder="2.00">
+              <div class="form-hint">
+                e.g. $2.00/min × 20 min late = $40.00 deduction
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="policy-section" style="padding-top:14px;border-bottom:none;">
+          <button type="submit" id="btn-policy-save" class="btn btn-primary">
+            <i class="ti ti-device-floppy"></i>
+            Save Policy
+          </button>
+          <span id="policy-save-status" style="font-size:12px;color:var(--text-muted);margin-left:12px;"></span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Current policy summary card -->
+    <div class="card" id="policy-summary-card">
+      <div class="card-header">
+        <div class="card-title">Current Policy Summary</div>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:4px;">Work Start</div>
+            <div style="font-family:var(--font-mono);font-size:20px;color:var(--text-primary);"
+                 id="summary-start">{{ policy.start_time }}</div>
+          </div>
+
+          <hr class="divider">
+
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:4px;">Grace Period</div>
+            <div style="font-family:var(--font-mono);font-size:20px;color:var(--text-primary);"
+                 id="summary-grace">{{ policy.grace_period_minutes }} min</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+              On-time window: up to
+              <span class="mono" id="summary-deadline" style="color:var(--text-secondary);">—</span>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:8px;">Deduction Rules</div>
+
+            {% if policy.deduction_type == 'per_minute' %}
+            <div class="flex items-center gap-8" style="margin-bottom:8px;">
+              <span class="badge badge-danger">Per-Minute Mode</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-primary);">
+              <span class="mono">${{ '%.2f' % policy.per_minute_rate }}</span>
+              <span style="color:var(--text-muted);"> per minute late</span>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-8" style="margin-bottom:8px;">
+              <span class="badge badge-muted">Flat-Tier Mode</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;
+                          padding:8px 10px;background:var(--bg-hover);border-radius:6px;">
+                <span style="font-size:12px;color:var(--text-secondary);">Late</span>
+                <span class="mono deduction-amount">${{ '%.2f' % policy.late_flat }}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;
+                          padding:8px 10px;background:var(--bg-hover);border-radius:6px;">
+                <span style="font-size:12px;color:var(--text-secondary);">Very Late
+                  <span class="text-muted">(≥ {{ policy.very_late_threshold_minutes }} min)</span>
+                </span>
+                <span class="mono deduction-amount">${{ '%.2f' % policy.very_late_flat }}</span>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- grid -->
+
+</div><!-- .page-body -->
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Deduction type toggle
+  function setDeductionType(type) {
+    document.getElementById('deduction-type').value = type;
+    document.getElementById('toggle-flat').classList.toggle('active', type === 'flat_tiers');
+    document.getElementById('toggle-permin').classList.toggle('active', type === 'per_minute');
+    document.getElementById('fields-flat').style.display   = type === 'flat_tiers' ? '' : 'none';
+    document.getElementById('fields-permin').style.display = type === 'per_minute' ? '' : 'none';
+  }
+
+  // Compute and display the on-time deadline
+  function updateDeadlineDisplay() {
+    const startInput  = document.getElementById('start-time').value;
+    const graceInput  = parseInt(document.getElementById('grace-period').value, 10) || 0;
+    const el          = document.getElementById('summary-deadline');
+    if (!startInput || !el) return;
+
+    const [h, m] = startInput.split(':').map(Number);
+    const totalMin = h * 60 + m + graceInput;
+    const dh = Math.floor(totalMin / 60) % 24;
+    const dm = totalMin % 60;
+    el.textContent = `${String(dh).padStart(2,'0')}:${String(dm).padStart(2,'0')}`;
+
+    document.getElementById('summary-start').textContent = startInput;
+    document.getElementById('summary-grace').textContent = `${graceInput} min`;
+  }
+
+  document.getElementById('start-time').addEventListener('change', updateDeadlineDisplay);
+  document.getElementById('grace-period').addEventListener('input', updateDeadlineDisplay);
+  updateDeadlineDisplay();
+
+  // Form submit
+  document.getElementById('policy-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn    = document.getElementById('btn-policy-save');
+    const status = document.getElementById('policy-save-status');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+    status.textContent = '';
+
+    const data = {
+      start_time:                  document.getElementById('start-time').value,
+      grace_period_minutes:        parseInt(document.getElementById('grace-period').value),
+      deduction_type:              document.getElementById('deduction-type').value,
+      per_minute_rate:             parseFloat(document.getElementById('per-minute-rate').value) || 2.0,
+      late_flat:                   parseFloat(document.getElementById('late-flat').value) || 25.0,
+      very_late_flat:              parseFloat(document.getElementById('very-late-flat').value) || 75.0,
+      very_late_threshold_minutes: parseInt(document.getElementById('very-late-threshold').value) || 60,
+    };
+
+    try {
+      const res  = await fetch('/api/policy/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+
+      const alertEl = document.getElementById('policy-alert');
+      if (json.ok) {
+        alertEl.innerHTML = `<div class="alert alert-success"><i class="ti ti-check"></i><span>${json.message}</span></div>`;
+        status.textContent = 'Saved';
+        status.style.color = 'var(--success)';
+      } else {
+        alertEl.innerHTML = `<div class="alert alert-danger"><i class="ti ti-alert-circle"></i><span>${json.error}</span></div>`;
+        status.textContent = 'Error';
+        status.style.color = 'var(--danger)';
+      }
+      setTimeout(() => { status.textContent = ''; }, 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-device-floppy"></i> Save Policy';
+    }
+  });
+</script>
+{% endblock %}

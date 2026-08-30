@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Payroll Export{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Payroll Export</h1>
+    <div class="page-subtitle">Download attendance and deduction data for payroll processing</div>
+  </div>
+</div>
+
+<div class="page-body">
+
+  <div id="export-alert"></div>
+
+  <div class="export-layout">
+
+    <!-- Export form -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Export Options</div>
+          <div class="card-subtitle">Select a date range and format</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Date Range</label>
+          <div class="flex gap-8 items-center">
+            <input type="date" id="export-from" class="form-input" style="color-scheme:dark;">
+            <span class="text-muted">to</span>
+            <input type="date" id="export-to" class="form-input" style="color-scheme:dark;">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quick Select</label>
+          <div class="flex gap-8" style="flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="setRange('this_month')">This Month</button>
+            <button class="btn btn-sm" onclick="setRange('last_month')">Last Month</button>
+            <button class="btn btn-sm" onclick="setRange('last_7')">Last 7 Days</button>
+            <button class="btn btn-sm" onclick="setRange('last_30')">Last 30 Days</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Export Format</label>
+          <div class="flex gap-8">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary);">
+              <input type="radio" name="export-format" value="csv" checked
+                     style="accent-color:var(--accent);"> CSV
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary);">
+              <input type="radio" name="export-format" value="xlsx"
+                     style="accent-color:var(--accent);"> Excel (.xlsx)
+            </label>
+          </div>
+        </div>
+
+        <div class="flex gap-8" style="margin-top:8px;">
+          <button id="btn-preview" class="btn" onclick="previewExport()">
+            <i class="ti ti-eye"></i>
+            Preview
+          </button>
+          <button id="btn-export" class="btn btn-primary" onclick="doExport()">
+            <i class="ti ti-download"></i>
+            Download Export
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview pane -->
+    <div>
+      <div class="table-card export-preview">
+        <div class="table-header">
+          <div class="table-title">Preview</div>
+          <div class="table-meta" id="preview-count">Select a range and click Preview</div>
+        </div>
+        <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Date</th>
+                <th>Check-In</th>
+                <th>Status</th>
+                <th>Deduction</th>
+              </tr>
+            </thead>
+            <tbody id="preview-tbody">
+              <tr>
+                <td colspan="6">
+                  <div class="empty-state">
+                    <i class="ti ti-table" style="font-size:28px;opacity:0.25;"></i>
+                    <div class="empty-state-title">No preview loaded</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Deduction summary -->
+        <div id="deduction-summary" style="display:none;
+             padding:14px 18px;border-top:1px solid var(--border-soft);
+             display:flex;gap:24px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:4px;">Total Records</div>
+            <div class="mono" id="sum-records" style="font-size:18px;">—</div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:4px;">Late Records</div>
+            <div class="mono text-danger" id="sum-late" style="font-size:18px;">—</div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+                        color:var(--text-muted);margin-bottom:4px;">Total Deductions</div>
+            <div class="mono deduction-amount" id="sum-deductions" style="font-size:18px;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .export-layout -->
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setRange(preset) {
+    const now   = new Date();
+    const y     = now.getFullYear();
+    const m     = now.getMonth();
+    let from, to;
+    const pad   = n => String(n).padStart(2,'0');
+    const ymd   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+    if (preset === 'this_month') {
+      from = `${y}-${pad(m+1)}-01`;
+      to   = ymd(now);
+    } else if (preset === 'last_month') {
+      const lm   = new Date(y, m, 0);   // last day of prev month
+      from = `${lm.getFullYear()}-${pad(lm.getMonth()+1)}-01`;
+      to   = ymd(lm);
+    } else if (preset === 'last_7') {
+      const d7 = new Date(now); d7.setDate(d7.getDate() - 6);
+      from = ymd(d7); to = ymd(now);
+    } else if (preset === 'last_30') {
+      const d30 = new Date(now); d30.setDate(d30.getDate() - 29);
+      from = ymd(d30); to = ymd(now);
+    }
+
+    document.getElementById('export-from').value = from;
+    document.getElementById('export-to').value   = to;
+  }
+
+  function escH(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+           .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function inits(n) {
+    return (n||'?').split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);
+  }
+
+  async function previewExport() {
+    const from = document.getElementById('export-from').value;
+    const to   = document.getElementById('export-to').value;
+    if (!from || !to) {
+      showAlert('Please select a date range first.', 'danger'); return;
+    }
+
+    const tbody = document.getElementById('preview-tbody');
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span class="spinner"></span></div></td></tr>`;
+
+    try {
+      const res  = await fetch(`/api/log?date_from=${from}&date_to=${to}&per_page=200`);
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+
+      const rows = json.data;
+      document.getElementById('preview-count').textContent = `${rows.length} records`;
+
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+          <div class="empty-state-title">No records in this range</div></div></td></tr>`;
+        return;
+      }
+
+      const badgeCls = {on_time:'badge-success',late:'badge-danger',very_late:'badge-warning'};
+      tbody.innerHTML = rows.map(r => `<tr>
+        <td>
+          <div class="employee-cell">
+            <div class="avatar">${inits(r.name)}</div>
+            <div class="employee-info">
+              <div class="emp-name">${escH(r.name)}</div>
+            </div>
+          </div>
+        </td>
+        <td><span class="text-secondary">${escH(r.department)}</span></td>
+        <td><span class="mono" style="font-size:12px;">${escH(r.date)}</span></td>
+        <td><span class="mono">${escH(r.check_in_time)}</span></td>
+        <td><span class="badge ${badgeCls[r.status]||'badge-muted'}">
+          <span class="badge-dot"></span>${escH(r.status_label||r.status)}</span></td>
+        <td>${r.deduction_amount > 0
+          ? `<span class="deduction-amount mono">-$${parseFloat(r.deduction_amount).toFixed(2)}</span>`
+          : `<span class="deduction-none mono">—</span>`}</td>
+      </tr>`).join('');
+
+      // Summary
+      const totalDeduct = rows.reduce((s, r) => s + (parseFloat(r.deduction_amount)||0), 0);
+      const lateCount   = rows.filter(r => r.status !== 'on_time').length;
+      document.getElementById('sum-records').textContent    = rows.length;
+      document.getElementById('sum-late').textContent       = lateCount;
+      document.getElementById('sum-deductions').textContent = `-$${totalDeduct.toFixed(2)}`;
+      document.getElementById('deduction-summary').style.display = 'flex';
+
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+        <div class="empty-state-title">Error: ${escH(err.message)}</div></div></td></tr>`;
+    }
+  }
+
+  function doExport() {
+    const from = document.getElementById('export-from').value;
+    const to   = document.getElementById('export-to').value;
+    const fmt  = document.querySelector('input[name="export-format"]:checked')?.value || 'csv';
+    if (!from || !to) { showAlert('Select a date range first.', 'danger'); return; }
+    window.location.href = `/export/payroll?date_from=${from}&date_to=${to}&format=${fmt}`;
+  }
+
+  function showAlert(msg, type) {
+    const el = document.getElementById('export-alert');
+    if (!el) return;
+    el.innerHTML = `<div class="alert alert-${type}"><i class="ti ti-alert-circle"></i><span>${msg}</span></div>`;
+    setTimeout(() => { el.innerHTML = ''; }, 4000);
+  }
+
+  // Default to this month
+  setRange('this_month');
+</script>
+{% endblock %}

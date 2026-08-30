@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Enroll Employee{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Enroll Employee</h1>
+    <div class="page-subtitle">Register a new employee with face recognition</div>
+  </div>
+</div>
+
+<div class="page-body">
+
+  {% if not face_recognition_available %}
+  <div class="alert alert-warning" style="margin-bottom:16px;">
+    <i class="ti ti-alert-triangle"></i>
+    <span><strong>face_recognition library not installed.</strong>
+      Employees can be added without face data, but live recognition will not work.
+      See README.md for dlib installation instructions.
+    </span>
+  </div>
+  {% endif %}
+
+  <div id="enroll-alert"></div>
+
+  <div class="enroll-layout">
+
+    <!-- Left: Form + capture controls -->
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Employee Details</div>
+            <div class="card-subtitle">Fill in the employee's information</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <form id="enroll-form" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="emp-name">Full Name</label>
+              <input type="text" id="emp-name" class="form-input"
+                     placeholder="e.g. Alexandra Chen" autocomplete="off">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="emp-dept">Department</label>
+                <input type="text" id="emp-dept" class="form-input"
+                       placeholder="e.g. Engineering" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="emp-salary">Base Annual Salary ($)</label>
+                <input type="number" id="emp-salary" class="form-input"
+                       placeholder="e.g. 85000" min="0" step="500">
+              </div>
+            </div>
+
+            <hr class="divider" style="margin:8px 0 16px;">
+
+            <!-- Capture section -->
+            <div style="margin-bottom:12px;">
+              <label class="form-label">Face Captures</label>
+              <div class="form-hint" style="margin-bottom:10px;">
+                Position the employee's face in the camera feed, then click
+                <strong style="color:var(--text-primary);">Capture Photo</strong>.
+                Minimum <strong style="color:var(--text-primary);">3 captures</strong> required
+                (up to 5 for better accuracy).
+              </div>
+
+              <!-- Capture count + progress -->
+              <div class="capture-count" id="capture-count">0</div>
+              <div class="capture-min" id="capture-min-label">0 / 3 minimum captures needed</div>
+              <div class="capture-progress">
+                <div class="capture-progress-fill" id="capture-progress-fill" style="width:0%"></div>
+              </div>
+
+              <!-- Thumbnail gallery -->
+              <div class="capture-gallery" style="margin-top:10px;">
+                {% for i in range(5) %}
+                <div class="capture-thumb" id="thumb-{{ i }}">
+                  <div class="empty-slot">
+                    <i class="ti ti-camera" style="font-size:18px;"></i>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="flex gap-8" style="margin-top:16px;">
+              <button type="button" id="btn-capture" class="btn btn-success"
+                      {% if not face_recognition_available %}disabled{% endif %}>
+                <i class="ti ti-camera"></i>
+                Capture Photo
+              </button>
+              <button type="button" id="btn-enroll-reset" class="btn">
+                <i class="ti ti-refresh"></i>
+                Reset
+              </button>
+              <button type="submit" id="btn-enroll-submit" class="btn btn-primary ml-auto" disabled>
+                <i class="ti ti-user-check"></i>
+                Enroll Employee
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Live feed preview -->
+    <div>
+      <div class="card">
+        <div class="camera-header" style="padding:12px 14px;">
+          <div class="camera-title">
+            <span class="live-dot"></span>
+            Camera Preview
+          </div>
+          <div class="camera-meta">CAM_01 · Local</div>
+        </div>
+        <div style="background:#000; line-height:0;">
+          <img src="{{ url_for('video_feed') }}"
+               alt="Live camera preview for enrollment"
+               style="width:100%;max-height:360px;object-fit:cover;display:block;"
+               onerror="this.style.display='none';document.getElementById('cam-err-enroll').style.display='flex'">
+          <div id="cam-err-enroll" style="display:none;height:280px;align-items:center;justify-content:center;
+               background:var(--bg-base);color:var(--text-muted);flex-direction:column;gap:8px;">
+            <i class="ti ti-camera-off" style="font-size:32px;opacity:0.3;"></i>
+            <span style="font-size:13px;">Camera unavailable</span>
+          </div>
+        </div>
+        <div style="padding:12px 14px;border-top:1px solid var(--border-soft);">
+          <div style="font-size:12px;color:var(--text-muted);">
+            <i class="ti ti-info-circle" style="font-size:13px;vertical-align:middle;"></i>
+            Each capture grabs the current frame server-side. Ensure good lighting
+            and that only one face is visible during capture.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .enroll-layout -->
+
+  <!-- Enrolled employees table -->
+  <div class="table-card enrolled-table">
+    <div class="table-header">
+      <div class="table-title">All Employees</div>
+      <div class="table-meta" style="color:var(--text-muted);font-size:12px;">
+        Enrolled employees appear in the recognition loop
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="enrolled-tbody">
+          <tr><td colspan="3"><div class="empty-state"><span class="spinner"></span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
+    <div class="card" style="width:400px;">
+      <div class="card-header">
+        <div class="card-title">Edit Employee</div>
+        <button type="button" class="btn-icon" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer;" onclick="closeEditModal()">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+      <div class="card-body">
+        <form id="edit-form" novalidate>
+          <input type="hidden" id="edit-emp-id">
+          <div class="form-group">
+            <label class="form-label" for="edit-emp-name">Full Name</label>
+            <input type="text" id="edit-emp-name" class="form-input" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-emp-dept">Department</label>
+            <input type="text" id="edit-emp-dept" class="form-input" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-emp-salary">Base Annual Salary ($)</label>
+            <input type="number" id="edit-emp-salary" class="form-input" min="0" step="500">
+          </div>
+          <div class="flex gap-8" style="margin-top:20px;">
+            <button type="button" class="btn" onclick="closeEditModal()">Cancel</button>
+            <button type="submit" id="btn-edit-submit" class="btn btn-primary ml-auto">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .page-body -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/enroll.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,44 @@
+# ============================================================================
+# requirements.txt — Enterprise Face-Recognition Attendance System
+# ============================================================================
+#
+# NOTE ON DLIB / face_recognition
+# --------------------------------
+# `face_recognition` depends on `dlib`, which compiles from C++ source.
+# Before running `pip install -r requirements.txt` you need:
+#
+#   Windows:
+#     - Install Visual Studio Build Tools (C++ workload) from:
+#       https://visualstudio.microsoft.com/visual-cpp-build-tools/
+#     - Install CMake: https://cmake.org/download/
+#       (add to PATH during install)
+#     - OR use a pre-built wheel (easier):
+#       https://github.com/z-mahmud22/Dlib_Windows_Python3.x
+#       Download the .whl for your Python version and run:
+#         pip install dlib‑19.24.0‑cp311‑cp311‑win_amd64.whl
+#
+#   macOS:
+#     - brew install cmake dlib
+#
+#   Linux (Ubuntu/Debian):
+#     - sudo apt-get install cmake build-essential libopenblas-dev liblapack-dev
+#
+# After dlib is installed, `pip install face_recognition` will work.
+# ============================================================================
+
+# Web framework
+flask>=3.0.0
+
+# Computer vision — webcam capture and frame drawing
+opencv-python>=4.9.0.80
+
+# Face recognition (requires dlib — see note above)
+face-recognition>=1.3.0
+dlib>=19.24.0
+
+# Numerical computing (used by face_recognition and attendance_logic)
+numpy>=1.26.0
+
+# Payroll export
+pandas>=2.2.0
+openpyxl>=3.1.2     # xlsx support for pandas ExcelWriter

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}Attendance Log{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Attendance Log</h1>
+    <div class="page-subtitle">Full historical record of employee check-ins</div>
+  </div>
+  <a href="{{ url_for('export_page') }}" class="btn btn-sm">
+    <i class="ti ti-download" style="font-size:14px;"></i>
+    Export to CSV
+  </a>
+</div>
+
+<div class="page-body">
+
+  <!-- Filter table card -->
+  <div class="table-card">
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <!-- Employee filter -->
+      <select id="filter-employee" class="form-select" style="min-width:160px;">
+        <option value="">All Employees</option>
+        {% for emp in employees %}
+        <option value="{{ emp.id }}">{{ emp.name }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Department filter -->
+      <select id="filter-dept" class="form-select">
+        <option value="">All Departments</option>
+        {% for dept in departments %}
+        <option value="{{ dept }}">{{ dept }}</option>
+        {% endfor %}
+      </select>
+
+      <!-- Status filter -->
+      <select id="filter-status" class="form-select">
+        <option value="">All Statuses</option>
+        <option value="on_time">On Time</option>
+        <option value="late">Late</option>
+        <option value="very_late">Very Late</option>
+      </select>
+
+      <!-- Date range -->
+      <input type="date" id="filter-from" class="form-input" title="From date"
+             style="color-scheme:dark;min-width:145px;">
+      <span style="color:var(--text-muted);font-size:13px;">→</span>
+      <input type="date" id="filter-to" class="form-input" title="To date"
+             style="color-scheme:dark;min-width:145px;">
+
+      <button id="btn-apply-filter" class="btn btn-primary btn-sm">
+        <i class="ti ti-filter"></i>
+        Apply
+      </button>
+      <button id="btn-clear-filter" class="btn btn-sm">
+        <i class="ti ti-x"></i>
+        Clear
+      </button>
+
+      <div class="ml-auto" style="color:var(--text-muted);font-size:12px;" id="log-total-label">—</div>
+    </div>
+
+    <!-- Table -->
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Date</th>
+            <th>Check-In Time</th>
+            <th>Status</th>
+            <th>Deduction</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody">
+          <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <div class="pagination-info" id="pagination-info">—</div>
+      <div class="pagination-controls" id="pagination-controls"></div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* -----------------------------------------------------------------------
+     Log page — filtering + pagination
+     ----------------------------------------------------------------------- */
+
+  let currentPage  = 1;
+  const PER_PAGE   = 25;
+  let totalPages   = 1;
+
+  function getFilters() {
+    return {
+      employee_id: document.getElementById('filter-employee').value,
+      department:  document.getElementById('filter-dept').value,
+      status:      document.getElementById('filter-status').value,
+      date_from:   document.getElementById('filter-from').value,
+      date_to:     document.getElementById('filter-to').value,
+    };
+  }
+
+  function buildQueryString(filters, page) {
+    const params = new URLSearchParams({ page, per_page: PER_PAGE });
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+    return params.toString();
+  }
+
+  function escH(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+           .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function inits(name) {
+    return (name||'?').split(' ').map(p=>p[0]).join('').toUpperCase().slice(0,2);
+  }
+  function badge(status, label) {
+    const m = { on_time:'badge-success', late:'badge-danger', very_late:'badge-warning' };
+    const cls = m[status] || 'badge-muted';
+    return `<span class="badge ${cls}"><span class="badge-dot"></span>${escH(label||status)}</span>`;
+  }
+  function fmt(d) { return d ? d.split('T')[0] : '—'; }
+
+  async function fetchLog(page) {
+    currentPage = page;
+    const filters = getFilters();
+    const qs      = buildQueryString(filters, page);
+    const tbody   = document.getElementById('log-tbody');
+
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span class="spinner"></span></div></td></tr>`;
+
+    try {
+      const res  = await fetch(`/api/log?${qs}`);
+      const json = await res.json();
+      if (!json.ok) { throw new Error(json.error); }
+
+      const rows = json.data;
+      totalPages = json.total_pages;
+      const total = json.total;
+
+      // Update header info
+      document.getElementById('log-total-label').textContent =
+        `${total} record${total !== 1 ? 's' : ''}`;
+
+      // Pagination info
+      const from = Math.min((page - 1) * PER_PAGE + 1, total);
+      const to   = Math.min(page * PER_PAGE, total);
+      document.getElementById('pagination-info').textContent =
+        total > 0 ? `Showing ${from}–${to} of ${total}` : 'No records';
+
+      // Build table rows
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6">
+          <div class="empty-state">
+            <i class="ti ti-database-off" style="font-size:28px;opacity:0.25;"></i>
+            <div class="empty-state-title">No records found</div>
+            <div class="empty-state-desc">Try adjusting your filters</div>
+          </div></td></tr>`;
+      } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+          <td>
+            <div class="employee-cell">
+              <div class="avatar">${inits(r.name)}</div>
+              <div class="employee-info">
+                <div class="emp-name">${escH(r.name)}</div>
+                <div class="emp-dept">${escH(r.department)}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="mono" style="font-size:12px;">${escH(r.date)}</span></td>
+          <td><span class="mono">${escH(r.check_in_time)}</span></td>
+          <td>${badge(r.status, r.status_label)}</td>
+          <td>${r.deduction_amount > 0
+            ? `<span class="deduction-amount mono">-$${parseFloat(r.deduction_amount).toFixed(2)}</span>`
+            : `<span class="deduction-none mono">—</span>`}</td>
+          <td>${r.confidence > 0
+            ? `<span class="mono text-secondary">${parseFloat(r.confidence).toFixed(1)}%</span>`
+            : `<span class="text-muted">—</span>`}</td>
+        </tr>`).join('');
+      }
+
+      renderPagination(page, totalPages);
+
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+        <div class="empty-state-title">Error loading records</div>
+        <div class="empty-state-desc">${escH(err.message)}</div>
+      </div></td></tr>`;
+      console.error(err);
+    }
+  }
+
+  function renderPagination(current, total) {
+    const ctrl = document.getElementById('pagination-controls');
+    if (!ctrl) return;
+
+    const pages = [];
+    pages.push({ label: '‹', page: current - 1, disabled: current <= 1 });
+
+    // Page numbers with ellipsis
+    let pageNums = [];
+    if (total <= 7) {
+      pageNums = Array.from({ length: total }, (_, i) => i + 1);
+    } else {
+      if (current <= 4) {
+        pageNums = [1, 2, 3, 4, 5, '…', total];
+      } else if (current >= total - 3) {
+        pageNums = [1, '…', total-4, total-3, total-2, total-1, total];
+      } else {
+        pageNums = [1, '…', current-1, current, current+1, '…', total];
+      }
+    }
+
+    ctrl.innerHTML = [
+      `<button class="page-btn" ${current <= 1 ? 'disabled' : ''}
+               onclick="fetchLog(${current - 1})">‹</button>`,
+      ...pageNums.map(p => p === '…'
+        ? `<span class="page-btn" style="cursor:default;pointer-events:none;">…</span>`
+        : `<button class="page-btn ${p === current ? 'active' : ''}"
+                   onclick="fetchLog(${p})">${p}</button>`
+      ),
+      `<button class="page-btn" ${current >= total ? 'disabled' : ''}
+               onclick="fetchLog(${current + 1})">›</button>`,
+    ].join('');
+  }
+
+  // Set default date range to current month
+  function setDefaultDates() {
+    const now  = new Date();
+    const y    = now.getFullYear();
+    const m    = String(now.getMonth() + 1).padStart(2, '0');
+    document.getElementById('filter-from').value = `${y}-${m}-01`;
+    document.getElementById('filter-to').value   = now.toISOString().split('T')[0];
+  }
+
+  document.getElementById('btn-apply-filter').addEventListener('click', () => fetchLog(1));
+  document.getElementById('btn-clear-filter').addEventListener('click', () => {
+    document.getElementById('filter-employee').value = '';
+    document.getElementById('filter-dept').value     = '';
+    document.getElementById('filter-status').value   = '';
+    document.getElementById('filter-from').value     = '';
+    document.getElementById('filter-to').value       = '';
+    fetchLog(1);
+  });
+
+  // Also allow pressing Enter in date inputs
+  ['filter-from','filter-to'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') fetchLog(1);
+    });
+  });
+
+  // Init
+  setDefaultDates();
+  fetchLog(1);
+</script>
+{% endblock %}
